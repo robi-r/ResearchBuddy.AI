@@ -1,6 +1,6 @@
 # ResearchBuddy 🎓
 
-ResearchBuddy is a highly polished, gamified academic matchup platform ("Dating App for Scientists") that helps researchers, PhD scholars, and CS fellows find complementary co-authors and collaborators.
+ResearchBuddy is a highly polished, academic matchup platform that helps researchers, PhD scholars, and CS fellows find complementary co-authors and collaborators.
 
 ---
 
