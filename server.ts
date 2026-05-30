@@ -278,8 +278,8 @@ app.post("/api/auth/signup", (req, res) => {
   USERS_DB.set(generatedId, newProfile);
   ACTIVE_SESSION_USER_ID = generatedId;
 
-  // Simulate dating app setup: other candidates like Julian and Elena automatically liked this new user!
-  // This guarantees when the user goes to Likes tab, the mock database has received Swipes!
+  // Simulate networking database setup: other candidates like Julian and Elena automatically requested a connection with this new user!
+  // This guarantees when the user goes to Requests tab, the mock database has received candidate invitations!
   LIKES_DB.push({ fromId: "julian_thorne", toId: generatedId });
   LIKES_DB.push({ fromId: "elena_volkov", toId: generatedId });
 
@@ -394,7 +394,7 @@ app.post("/api/auth/preset", (req, res) => {
   USERS_DB.set(id, newProfile);
   ACTIVE_SESSION_USER_ID = id;
 
-  // Clear previous likes to reset cleanly, and insert incoming likes so the judge sees the dating flow instantly
+  // Clear previous likes to reset cleanly, and insert incoming likes so the judge sees the connection workflow instantly
   // Filter out any previous likes involving this person to prevent duplicate items
   for (let i = LIKES_DB.length - 1; i >= 0; i--) {
     if (LIKES_DB[i].toId === id || LIKES_DB[i].fromId === id) {
