@@ -1,0 +1,15 @@
+{
+  "name": "researchbuddy-mcp-server",
+  "version": "1.0.0",
+  "description": "Model Context Protocol (MCP) server for querying ResearchBuddy collaborator vectors and active matches.",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.1",
+    "@supabase/supabase-js": "^2.39.0",
+    "dotenv": "^16.4.5"
+  }
+}
