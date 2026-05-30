@@ -1,4 +1,4 @@
-# 🏆 ResearchBuddy: Hackathon Submission & Technical Documentation
+#ResearchBuddy: Hackathon Submission & Technical Documentation
 
 Welcome to **ResearchBuddy** – a highly polished, gamified academic collaboration platform designed to accelerate scientific breakthroughs. 
 
