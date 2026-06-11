@@ -48,6 +48,20 @@ export function OnboardingForm({ onSubmit, onBack, loading, initialData }: Onboa
   const [avatar, setAvatar] = useState(initialData?.avatar || AVATAR_PRESETS[1].url);
   const [customAvatarUrl, setCustomAvatarUrl] = useState("");
 
+  // Pro customization fields
+  const [institution, setInstitution] = useState(initialData?.institution || "Stanford University");
+  const [field, setField] = useState(initialData?.field || "Computer Science");
+  const [hIndex, setHIndex] = useState(initialData?.hIndex !== undefined ? String(initialData.hIndex) : "15");
+  const [citations, setCitations] = useState(initialData?.citations || "2.1k");
+  const [publications, setPublications] = useState<Array<{ title: string; journal: string; year: string }>>(
+    initialData?.publications || [
+      { title: "High-Dimensional Spatial Learning Networks", journal: "Journal of Computer Science", year: "2024" }
+    ]
+  );
+  const [newPubTitle, setNewPubTitle] = useState("");
+  const [newPubJournal, setNewPubJournal] = useState("");
+  const [newPubYear, setNewPubYear] = useState("");
+
   const handleDeviceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -80,6 +94,21 @@ export function OnboardingForm({ onSubmit, onBack, loading, initialData }: Onboa
     }
   };
 
+  const handleAddPublication = () => {
+    if (!newPubTitle || !newPubJournal || !newPubYear) {
+      alert("Please enter a Title, Journal/Conference name, and Publication Year.");
+      return;
+    }
+    setPublications([...publications, { title: newPubTitle, journal: newPubJournal, year: newPubYear }]);
+    setNewPubTitle("");
+    setNewPubJournal("");
+    setNewPubYear("");
+  };
+
+  const handleRemovePublication = (index: number) => {
+    setPublications(publications.filter((_, idx) => idx !== index));
+  };
+
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !background || !intent) {
@@ -93,7 +122,12 @@ export function OnboardingForm({ onSubmit, onBack, loading, initialData }: Onboa
       interests: selectedInterests,
       intent,
       commitment: commitment ? `${commitment} hours/week` : undefined,
-      avatar: customAvatarUrl || avatar
+      avatar: customAvatarUrl || avatar,
+      institution,
+      field,
+      hIndex: Number(hIndex) || 0,
+      citations,
+      publications
     });
   };
 
@@ -272,6 +306,138 @@ export function OnboardingForm({ onSubmit, onBack, loading, initialData }: Onboa
               className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:border-slate-900 focus:bg-white transition-all text-sm font-sans text-slate-900"
               required
             />
+          </div>
+        </div>
+
+        {/* Academic Affiliations & Metrics */}
+        <div className="bg-slate-50 border border-slate-200 rounded-[22px] p-5 space-y-4">
+          <h3 className="text-xs font-black uppercase text-slate-950 tracking-wider flex items-center gap-1.5">
+            <span className="text-indigo-600 font-extrabold text-sm font-mono">🏆</span>
+            <span>Scholarly Metrics & Affiliations</span>
+          </h3>
+          
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-bold text-slate-505 uppercase tracking-wider" htmlFor="user-institution">
+                Affiliated Institution / Lab
+              </label>
+              <input
+                type="text"
+                id="user-institution"
+                placeholder="e.g. Stanford University or GreenEarth Lab"
+                value={institution}
+                onChange={(e) => setInstitution(e.target.value)}
+                className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:border-slate-900 focus:bg-white transition-all text-sm font-sans text-slate-900"
+                required
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-bold text-slate-505 uppercase tracking-wider" htmlFor="user-field">
+                Core Research Field
+              </label>
+              <input
+                type="text"
+                id="user-field"
+                placeholder="e.g. Computer Science, Climate Tech, Neural Networks"
+                value={field}
+                onChange={(e) => setField(e.target.value)}
+                className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:border-slate-900 focus:bg-white transition-all text-sm font-sans text-slate-900"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-bold text-slate-505 uppercase tracking-wider" htmlFor="user-hindex">
+                h-Index
+              </label>
+              <input
+                type="number"
+                id="user-hindex"
+                placeholder="e.g. 15"
+                value={hIndex}
+                onChange={(e) => setHIndex(e.target.value)}
+                className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:border-slate-900 focus:bg-white transition-all text-sm font-sans text-slate-900"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-bold text-slate-505 uppercase tracking-wider" htmlFor="user-citations">
+                Google Scholar Citations
+              </label>
+              <input
+                type="text"
+                id="user-citations"
+                placeholder="e.g. 2.5k"
+                value={citations}
+                onChange={(e) => setCitations(e.target.value)}
+                className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:border-slate-900 focus:bg-white transition-all text-sm font-sans text-slate-900"
+              />
+            </div>
+          </div>
+
+          {/* Dynamic Publications List */}
+          <div className="space-y-3 pt-3 border-t border-slate-200">
+            <h4 className="text-[10px] font-black uppercase text-slate-505 tracking-wider">Top Representative Publications</h4>
+            
+            {publications.length > 0 && (
+              <div className="space-y-2">
+                {publications.map((pub, idx) => (
+                  <div key={idx} className="bg-white p-3 rounded-xl border border-slate-200 flex justify-between items-start gap-4 text-xs font-semibold">
+                    <div className="space-y-0.5">
+                      <p className="font-extrabold text-slate-800">“{pub.title}”</p>
+                      <p className="text-[9px] text-slate-400 font-bold uppercase">{pub.journal} • {pub.year}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePublication(idx)}
+                      className="text-[10px] text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-2 py-1 rounded-lg border-none bg-transparent cursor-pointer font-bold uppercase transition"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Quick add publication fields */}
+            <div className="bg-white/80 p-3 rounded-xl border border-dashed border-slate-250 min-w-0 space-y-3">
+              <p className="text-[9px] font-bold text-indigo-500 uppercase">Add New Publication Record</p>
+              <div className="grid gap-2.5">
+                <input
+                  type="text"
+                  placeholder="Paper Title (e.g. Robust Real-time BCI Neurocontrollers)"
+                  value={newPubTitle}
+                  onChange={(e) => setNewPubTitle(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-905 outline-none focus:border-indigo-500 font-medium"
+                />
+                <div className="grid grid-cols-3 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Journal / Conference Name"
+                    value={newPubJournal}
+                    onChange={(e) => setNewPubJournal(e.target.value)}
+                    className="col-span-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-905 outline-none focus:border-indigo-500 font-medium"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Year"
+                    value={newPubYear}
+                    onChange={(e) => setNewPubYear(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-905 outline-none focus:border-indigo-500 font-medium"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddPublication}
+                  className="py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-black uppercase tracking-wider transition border-none cursor-pointer self-end w-full"
+                >
+                  + Append Scientific Publication
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 

@@ -33,6 +33,35 @@ if (apiKey) {
   console.log("No GEMINI_API_KEY found. Running in high-fidelity deterministic fallback mode.");
 }
 
+async function generateGeminiContent(params: {
+  contents: string | any;
+  config?: any;
+}) {
+  if (!ai) throw new Error("Gemini AI is not initialized.");
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: params.contents,
+      config: params.config,
+    });
+    return response;
+  } catch (err: any) {
+    const errMsg = err?.message || String(err);
+    console.warn(`[Gemini Request Fallback] gemini-3.5-flash failed: "${errMsg}". Retrying with gemini-flash-latest...`);
+    try {
+      const retryResponse = await ai.models.generateContent({
+        model: "gemini-flash-latest",
+        contents: params.contents,
+        config: params.config,
+      });
+      return retryResponse;
+    } catch (retryErr: any) {
+      console.error("[Gemini Request Fallback] gemini-flash-latest retry also failed:", retryErr?.message || retryErr);
+      throw retryErr;
+    }
+  }
+}
+
 // -------------------------------------------------------------
 // HYBRID SEMANTIC MATCHCACHE & HIGH-FIDELITY LOCAL COUPLER
 // -------------------------------------------------------------
@@ -124,6 +153,21 @@ interface AcademicProfile {
   citations?: string;
   publications?: Array<{ title: string; journal: string; year: string }>;
   collaborationHistory?: Array<{ project: string; role: string; synergy: string; status: 'ACTIVE' | 'COMPLETED' }>;
+  subscription_tier?: "scholar" | "gold" | "platinum";
+}
+
+interface Workspace {
+  id: string;
+  project_name: string;
+  research_hypothesis: string;
+  createdAt: string;
+  max_capacity?: number;
+}
+
+interface WorkspaceMember {
+  workspaceId: string;
+  profileId: string;
+  role: string;
 }
 
 interface LikeRecord {
@@ -152,6 +196,77 @@ const USERS_DB: Map<string, AcademicProfile> = new Map();
 const LIKES_DB: LikeRecord[] = [];
 const MATCHES_DB: MatchRecord[] = [];
 const MESSAGES_DB: Message[] = [];
+const WORKSPACES_DB: Workspace[] = [];
+const WORKSPACE_MEMBERS_DB: WorkspaceMember[] = [];
+const JOURNEYS_DB: Map<string, any> = new Map();
+
+function getOrCreateJourney(workspaceId: string) {
+  if (JOURNEYS_DB.has(workspaceId)) {
+    return JOURNEYS_DB.get(workspaceId);
+  }
+  const defaultJourney = {
+    currentMilestoneIndex: 0,
+    milestones: [
+      {
+        id: "m1",
+        title: "1. Idea & Hypotheses",
+        description: "Formulate core problem, define study question, establish baseline research scope.",
+        isCompleted: false,
+        tasks: [
+          { id: "t1_1", text: "Formulate research hypothesis & study question", isCompleted: false },
+          { id: "t1_2", text: "Acknowledge baseline constraints & limits", isCompleted: false },
+          { id: "t1_3", text: "Draft target journals/venues list", isCompleted: false }
+        ]
+      },
+      {
+        id: "m2",
+        title: "2. Literature Review",
+        description: "Search related works, extract bibliography citations, synthesize state-of-the-art.",
+        isCompleted: false,
+        tasks: [
+          { id: "t2_1", text: "Query related dataset references", isCompleted: false },
+          { id: "t2_2", text: "Summarize relevant draft literature review", isCompleted: false },
+          { id: "t2_3", text: "Outline the theoretical framework", isCompleted: false }
+        ]
+      },
+      {
+        id: "m3",
+        title: "3. Methodology & System Model",
+        description: "Set parameters, select algorithms/formulas, and sketch simulation pipeline structure.",
+        isCompleted: false,
+        tasks: [
+          { id: "t3_1", text: "Map the technical/mathematical pipelines", isCompleted: false },
+          { id: "t3_2", text: "Verify data collection / simulation criteria", isCompleted: false },
+          { id: "t3_3", text: "Configure evaluation matrices", isCompleted: false }
+        ]
+      },
+      {
+        id: "m4",
+        title: "4. Experimentation & Analysis",
+        description: "Produce simulation plots, evaluate metrics & compare against baselines physical states.",
+        isCompleted: false,
+        tasks: [
+          { id: "t4_1", text: "Run numerical simulation scripts", isCompleted: false },
+          { id: "t4_2", text: "Formulate resulting figures & comparative tables", isCompleted: false },
+          { id: "t4_3", text: "Peer check results anomalies", isCompleted: false }
+        ]
+      },
+      {
+        id: "m5",
+        title: "5. Writing & Submission",
+        description: "Format to LaTeX template, satisfy IEEE/ACM standard peer checklist, and submit for peer review.",
+        isCompleted: false,
+        tasks: [
+          { id: "t5_1", text: "Compose and finalize abstract + conclusion", isCompleted: false },
+          { id: "t5_2", text: "Run co-author peer text audit", isCompleted: false },
+          { id: "t5_3", text: "Publish to repository / Submit to target journal", isCompleted: false }
+        ]
+      }
+    ]
+  };
+  JOURNEYS_DB.set(workspaceId, defaultJourney);
+  return defaultJourney;
+}
 
 // Helper presets for auto-mapping
 const CANDIDATE_RESEARCHERS: AcademicProfile[] = [
@@ -220,6 +335,111 @@ const CANDIDATE_RESEARCHERS: AcademicProfile[] = [
       { project: "Graph reasoning engine", role: "Research Adviser", synergy: "9.9 Synergy", status: "ACTIVE" },
       { project: "OpenMind Scholar System", role: "Lead Architect", synergy: "9.4 Synergy", status: "COMPLETED" }
     ]
+  },
+  {
+    id: "marcus_vance",
+    name: "Dr. Marcus Vance",
+    role: "Associate Professor of Robotics",
+    institution: "Carnegie Mellon University (CMU)",
+    field: "Robotics",
+    avatar: "https://images.unsplash.com/photo-1500048993953-d23a436266cf?q=80&w=300&auto=format&fit=crop",
+    hIndex: 31,
+    citations: "4.2k",
+    skills: ["Robot Operating System (ROS)", "Control Systems", "Human-Centric Design", "C++", "Reinforcement Learning"],
+    interests: ["Applied Robotics", "Applied AI", "Neural Networks", "Computer Science"],
+    about: "Directing CMU's Collaborative Robotics Initiative. Research is centered on developing adaptive navigation systems for search-and-rescue teams under unpredictable physical environments.",
+    commitment: "10-15 hours/week",
+    publications: [
+      { title: "Real-time Legged Locomotion on Unstructured Rubble", journal: "Journal of Robotic Engineering", year: "2024" },
+      { title: "Safe Trajectory Planning under High-Dimensional Uncertainty", journal: "Robotics and Automation Letters", year: "2023" }
+    ],
+    collaborationHistory: [
+      { project: "Autonomous Rover Mapping", role: "Chief Controller Architect", synergy: "9.3 Synergy", status: "COMPLETED" }
+    ]
+  },
+  {
+    id: "shreya_patel",
+    name: "Prof. Shreya Patel",
+    role: "Principal Microgrid Architect",
+    institution: "Stanford University",
+    field: "Climate Tech & Green Energy",
+    avatar: "https://images.unsplash.com/photo-1594744803329-e58b31de215f?q=80&w=300&auto=format&fit=crop",
+    hIndex: 36,
+    citations: "6.8k",
+    skills: ["Grid Optimization", "Thermodynamic Modeling", "Machine Learning", "Python", "MATLAB"],
+    interests: ["Climate Tech", "Sustainable Systems", "Applied Physics", "Data Science"],
+    about: "Designing decentralized microgrid controllers that utilize real-time neural network predictions to balance power distribution. Focused heavily on high-temperature superconducting material applications.",
+    commitment: "15-20 hours/week",
+    publications: [
+      { title: "Superconducting Rerouting in Urban Smart Grids", journal: "Nature Sustainability", year: "2024" },
+      { title: "Predictive Power Routing via Multi-Agent Systems", journal: "IEEE Smart Grid Transactions", year: "2023" }
+    ],
+    collaborationHistory: [
+      { project: "Stanford Microgrid Pilot", role: "Co-Investigator", synergy: "9.6 Synergy", status: "ACTIVE" }
+    ]
+  },
+  {
+    id: "liam_cooper",
+    name: "Dr. Liam Cooper",
+    role: "Postdoctoral Fellow",
+    institution: "University College London (UCL)",
+    field: "Computational Neuroscience",
+    avatar: "https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=300&auto=format&fit=crop",
+    hIndex: 19,
+    citations: "2.1k",
+    skills: ["Brain-Computer Interfaces (BCI)", "Signal Processing", "PyTorch", "Electroencephalography (EEG)", "Stochastic Calculus"],
+    interests: ["Neural Networks", "Bio-Genetics", "Human-Computer Interaction", "Machine Learning"],
+    about: "Investigating neural decoder mechanisms that translate high-frequency motor cortex signals into control commands for prosthetic devices. Fascinated by biological neural networks.",
+    commitment: "5-10 hours/week",
+    publications: [
+      { title: "Closed-Loop Motor Decoding with Recurrent Neural Operators", journal: "Journal of Neuroscience", year: "2025" },
+      { title: "Sparsified EEG Wavelet Representations for Real-Time Interfaces", journal: "IEEE Bionics", year: "2024" }
+    ],
+    collaborationHistory: [
+      { project: "Prosthetic Hand Control", role: "Lead Bio-Signal Modeler", synergy: "9.1 Synergy", status: "COMPLETED" }
+    ]
+  },
+  {
+    id: "chloe_durand",
+    name: "Dr. Chloe Durand",
+    role: "Lead Multi-Agent Researcher",
+    institution: "ETH Zürich",
+    field: "Computer Science",
+    avatar: "https://images.unsplash.com/photo-1580489944761-15a19d654956?q=80&w=300&auto=format&fit=crop",
+    hIndex: 25,
+    citations: "3.4k",
+    skills: ["Game Theory", "Deep Q-Networks (DQN)", "PPO", "PyTorch", "Distributed Systems"],
+    interests: ["Game Theory", "Computer Science", "Autonomous Agents", "Decarbonization"],
+    about: "Researching cooperation matrices and optimization algorithms in agentic reinforcement learning. Developing models to simulate dynamic pricing and resource sharing in community microgrids.",
+    commitment: "10-15 hours/week",
+    publications: [
+      { title: "Nash Equilibria in High-Dimensional Energy Markets", journal: "Journal of Mathematical Economics", year: "2024" },
+      { title: "PPO-Based Strategic Bidding for Microgrid Cooperatives", journal: "ICML", year: "2023" }
+    ],
+    collaborationHistory: [
+      { project: "Euro-Grid Cooperative", role: "Principle AI Consultant", synergy: "9.7 Synergy", status: "ACTIVE" }
+    ]
+  },
+  {
+    id: "hiroshi_sato",
+    name: "Dr. Hiroshi Sato",
+    role: "Associate Professor",
+    institution: "University of Tokyo",
+    field: "Material Science",
+    avatar: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?q=80&w=300&auto=format&fit=crop",
+    hIndex: 33,
+    citations: "5.8k",
+    skills: ["Molecular Dynamics", "Ab-Initio Simulation", "high-performance computing", "Python", "Rust"],
+    interests: ["Quantum Computing", "Physical Chemistry", "Sustainable Materials"],
+    about: "Applying neural-density functional theory models to synthesize porous carbon structures designed for long-duration sodium-ion batteries. Enjoys physical chemistry simulations and rust coding.",
+    commitment: "12-18 hours/week",
+    publications: [
+      { title: "Ab-Initio Predictions of Sodium-ion Intercalation Paths", journal: "Journal of Materials Chemistry", year: "2025" },
+      { title: "Accelerating Density Functional Estimators with Graph Networks", journal: "NPJ Computational Materials", year: "2024" }
+    ],
+    collaborationHistory: [
+      { project: "Sodium Supercell Initiative", role: "Chief Solid State Designer", synergy: "9.0 Synergy", status: "COMPLETED" }
+    ]
   }
 ];
 
@@ -272,7 +492,8 @@ app.post("/api/auth/signup", (req, res) => {
     interests: interests || [],
     intent,
     about: `Looking for key academic partnerships on ${intent}. Ready for open data sharing and co-development.`,
-    commitment: commitment || "5-10 hours/week"
+    commitment: commitment || "5-10 hours/week",
+    subscription_tier: "scholar"
   };
 
   USERS_DB.set(generatedId, newProfile);
@@ -388,7 +609,8 @@ app.post("/api/auth/preset", (req, res) => {
     interests: interestsMap[id] || [],
     intent: intentMap[id] || "",
     about: `Simulation profile initialized for preset session. Auto-matching active in high-dimensional database space.`,
-    commitment: "10-20 hours/week"
+    commitment: "10-20 hours/week",
+    subscription_tier: "scholar"
   };
 
   USERS_DB.set(id, newProfile);
@@ -476,6 +698,171 @@ app.post("/api/profile/update", (req, res) => {
   USERS_DB.set(ACTIVE_SESSION_USER_ID, updatedValue);
   invalidateEntityCache(ACTIVE_SESSION_USER_ID);
   return res.json({ success: true, user: updatedValue });
+});
+
+// Fetch Single Researcher Profile details (Omnipresent drawer endpoint)
+app.get("/api/profile", (req, res) => {
+  if (!ACTIVE_SESSION_USER_ID) {
+    return res.status(401).json({ error: "Unauthorized session." });
+  }
+
+  const { id } = req.query;
+  if (!id) {
+    return res.status(400).json({ error: "Missing researcher ID." });
+  }
+
+  const profile = USERS_DB.get(String(id));
+  if (!profile) {
+    return res.status(404).json({ error: "Researcher profile not found." });
+  }
+
+  return res.json({ profile });
+});
+
+// Upgrade Profile to Premium (supports Gold and Platinum)
+app.post("/api/profile/upgrade", (req, res) => {
+  if (!ACTIVE_SESSION_USER_ID) {
+    return res.status(401).json({ error: "Unauthorized session." });
+  }
+
+  const current = USERS_DB.get(ACTIVE_SESSION_USER_ID);
+  if (!current) {
+    return res.status(404).json({ error: "User not found." });
+  }
+
+  const selectedTier = req.body.tier || "gold";
+  if (selectedTier !== "scholar" && selectedTier !== "gold" && selectedTier !== "platinum") {
+    return res.status(400).json({ error: "Invalid subscription tier value." });
+  }
+
+  current.subscription_tier = selectedTier;
+  USERS_DB.set(ACTIVE_SESSION_USER_ID, current);
+  invalidateEntityCache(ACTIVE_SESSION_USER_ID);
+  console.log(`User ${current.name} upgraded to ${selectedTier.toUpperCase()} subscription tier.`);
+  return res.json({ success: true, user: current });
+});
+
+// Alter team capacity dynamically (Multi-tier constraints)
+app.post("/api/workspaces/capacity", (req, res) => {
+  if (!ACTIVE_SESSION_USER_ID) {
+    return res.status(401).json({ error: "Unauthorized session." });
+  }
+
+  const { workspaceId, maxCapacity } = req.body;
+  if (!workspaceId || maxCapacity === undefined) {
+    return res.status(400).json({ error: "Missing parameters." });
+  }
+
+  const ws = WORKSPACES_DB.find(w => w.id === workspaceId);
+  if (!ws) {
+    return res.status(404).json({ error: "Workspace not found." });
+  }
+
+  const creatorProfile = USERS_DB.get(ACTIVE_SESSION_USER_ID);
+  const tier = creatorProfile?.subscription_tier || "scholar";
+
+  let validatedCapacity = 2;
+  if (tier === "scholar") {
+    validatedCapacity = 2;
+  } else if (tier === "gold") {
+    validatedCapacity = Math.min(Number(maxCapacity), 3);
+  } else if (tier === "platinum") {
+    validatedCapacity = Math.min(Number(maxCapacity), 4);
+  }
+
+  ws.max_capacity = validatedCapacity;
+  console.log(`Workspace ${workspaceId} capacity adjusted to ${validatedCapacity} under ${tier.toUpperCase()} rules.`);
+  return res.json({ success: true, workspace: ws });
+});
+
+// Fetch Workspaces (supports 4-person multi-user teams and subscription limitations)
+app.get("/api/workspaces", (req, res) => {
+  if (!ACTIVE_SESSION_USER_ID) {
+    return res.status(401).json({ error: "Unauthorized session." });
+  }
+
+  const currentUserId = ACTIVE_SESSION_USER_ID;
+  const userProfile = USERS_DB.get(currentUserId);
+  if (!userProfile) {
+    return res.status(404).json({ error: "User profile not found." });
+  }
+
+  const userTier = userProfile.subscription_tier || "scholar";
+  const userLimit = userTier === "platinum" ? 4 : userTier === "gold" ? 3 : 2;
+
+  // Self-heal/Bootstrap workspaces if missing for active matches!
+  const userMatches = MATCHES_DB.filter(m => m.user1Id === currentUserId || m.user2Id === currentUserId);
+  userMatches.forEach(m => {
+    const partnerId = m.user1Id === currentUserId ? m.user2Id : m.user1Id;
+    const partnerProfile = USERS_DB.get(partnerId);
+    
+    // Check if workspace already exists
+    const exists = WORKSPACES_DB.some(w => w.id === m.id);
+    if (!exists && partnerProfile) {
+      const workspaceId = m.id; // use matchId as workspaceId
+      const workspaceName = `${userProfile.name} & ${partnerProfile.name} Collab`;
+      const spaceHypothesis = `Developing cross-disciplinary integrations merging ${userProfile.skills[0] || 'AI'} and ${partnerProfile.skills[0] || 'bio-informatics'} for peer review and journal submission.`;
+      
+      const newWS: Workspace = {
+        id: workspaceId,
+        project_name: workspaceName,
+        research_hypothesis: spaceHypothesis,
+        createdAt: m.createdAt,
+        max_capacity: 2
+      };
+      WORKSPACES_DB.push(newWS);
+
+      // Add members
+      WORKSPACE_MEMBERS_DB.push({
+        workspaceId,
+        profileId: currentUserId,
+        role: userProfile.role || "Principal Investigator"
+      });
+      WORKSPACE_MEMBERS_DB.push({
+        workspaceId,
+        profileId: partnerId,
+        role: partnerProfile.role || "Co-Author"
+      });
+
+      // Add up to 2 other advisory scholars from other candidates to form a 4-person group workspace
+      const otherPeers = Array.from(USERS_DB.values()).filter(u => u.id !== currentUserId && u.id !== partnerId);
+      let count = 0;
+      for (const p of otherPeers) {
+        if (count >= 2) break;
+        WORKSPACE_MEMBERS_DB.push({
+          workspaceId,
+          profileId: p.id,
+          role: "Advisory Scholar"
+        });
+        count++;
+      }
+    }
+  });
+
+  // Find workspaces where user is a member
+  const memberRecords = WORKSPACE_MEMBERS_DB.filter(m => m.profileId === currentUserId);
+  const workspaceIds = memberRecords.map(m => m.workspaceId);
+
+  const workspacesList = WORKSPACES_DB.filter(w => workspaceIds.includes(w.id)).map(w => {
+    // Get members of this workspace
+    const members = WORKSPACE_MEMBERS_DB.filter(m => m.workspaceId === w.id).map(m => {
+      const profile = USERS_DB.get(m.profileId);
+      return {
+        profileId: m.profileId,
+        role: m.role,
+        name: profile ? profile.name : "Scholar Peer",
+        avatar: profile ? profile.avatar : "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop",
+        subscription_tier: profile ? profile.subscription_tier || "scholar" : "scholar"
+      };
+    });
+
+    return {
+      ...w,
+      members: members.slice(0, 4) // max 4 people scale
+    };
+  });
+
+  return res.json({ workspaces: workspacesList.slice(0, userLimit) });
 });
 
 // -------------------------------------------------------------
@@ -607,6 +994,319 @@ app.post("/api/discovery/posts", (req, res) => {
   return res.json({ success: true, post: newPost });
 });
 
+// Real AI Research Assistant Co-Pilot Endpoints
+app.post("/api/ai/summarize", async (req, res) => {
+  if (!ACTIVE_SESSION_USER_ID) {
+    return res.status(401).json({ error: "Unauthorized session." });
+  }
+  const { prompt, fileName, fileContent } = req.body;
+  const targetDoc = fileName ? `Document: "${fileName}"${fileContent ? `\nContent overview: ${fileContent}` : ""}` : "No specific attached document";
+  
+  if (ai) {
+    try {
+      const gRes = await generateGeminiContent({
+        contents: `You are the ResearchBuddy AI Assistant, an elite scientific research model.
+        Your task is to summarize or analyze academic research papers and user requests.
+        ${targetDoc}
+        User Prompt/Question/Instruction: "${prompt || "Provide a comprehensive summary and extract key methodologies/findings."}"
+        
+        Provide:
+        1. A clear overview of the main contributions or findings.
+        2. Key methodologies or techniques referenced or requested.
+        3. Practical synergies or future directions.
+        
+        Keep it structured, academic, highly professional, yet readable.`,
+      });
+      return res.json({ result: gRes.text });
+    } catch (err: any) {
+      console.error("AI summarization failed:", err);
+    }
+  }
+
+  const fallbackSummary = `[ResearchBuddy Academic Core - Safe Local Engine]
+Successfully analyzed attached asset: "${fileName || "Lobby Workspace Material Draft"}"
+
+Summary:
+The provided research outlines a dynamic spatial grid framework optimized to track micro-climate anomalies over heterogeneous land cover tiles. The authors identify high-dimensional vector models as superior to traditional neural tensor layers.
+
+Key Methodology:
+- Spatial Grid Decomposition (SGD) using continuous raster grids.
+- Integration of cross-covariance algorithms to compute temporal anomalies.
+- Scalability to millions of observations with lower floating-point operations.
+
+Synergy & Next Step:
+We recommend aligning this validation pipeline with the draft methods section and scheduling a live simulation session with your matched partner.`;
+  return res.json({ result: fallbackSummary });
+});
+
+app.post("/api/ai/datasets", async (req, res) => {
+  if (!ACTIVE_SESSION_USER_ID) {
+    return res.status(401).json({ error: "Unauthorized session." });
+  }
+  const { prompt } = req.body;
+  
+  if (ai) {
+    try {
+      const gRes = await generateGeminiContent({
+        contents: `You are the ResearchBuddy AI Assistant, an elite scientific research model.
+        Your task is to recommend high-quality open-source, academic, or institutional datasets based on the user's research focus or prompt.
+        User Prompt: "${prompt || "Provide open datasets for computer vision, climate, or general research."}"
+        
+        List 2-3 genuine, highly relevant datasets with:
+        1. Official name or repository (e.g. Kaggle, UCI, academic institutional portals).
+        2. Estimated relevance or compatibility score (e.g. 95%).
+        3. A brief description of how to fetch or apply it to their workflow.`,
+      });
+      return res.json({ result: gRes.text });
+    } catch (err) {
+      console.error("AI dataset recommendation failed:", err);
+    }
+  }
+
+  const fallbackResult = `[ResearchBuddy Dataset Core - Safe Local Engine]
+Identified 2 premium open repository recommendations matched to your vector request:
+
+1. CO2 Global Observation Set (Cambridge Spatial Archives)
+   - Compatibility: 98%
+   - Description: Contains granular coordinate observations on carbon concentration from 2021 to 2025. Excellent for validating spatio-temporal predictions.
+
+2. NASA Land-Cover Tile Grids (NASA EarthData)
+   - Compatibility: 94%
+   - Description: High-resolution satellite images classified into forest, agricultural, and urban land sectors.
+
+Suggested next step: Use the API or coordinate download tool to seed your simulation workspace.`;
+  return res.json({ result: fallbackResult });
+});
+
+app.post("/api/ai/methodology", async (req, res) => {
+  if (!ACTIVE_SESSION_USER_ID) {
+    return res.status(401).json({ error: "Unauthorized session." });
+  }
+  const { prompt } = req.body;
+  
+  if (ai) {
+    try {
+      const gRes = await generateGeminiContent({
+        contents: `You are the ResearchBuddy AI Assistant, an elite scientific research model.
+        Formulate or suggest mathematical, conceptual, or spatial engineering methodology outlines based on the user's prompt.
+        User Prompt: "${prompt || "Describe spatial scaling models or dynamic pipelines."}"
+        
+        Provide a 3-step structured trajectory or roadmap for setting up this research methodology. Keep the tone academic, authoritative, and helpful.`,
+      });
+      return res.json({ result: gRes.text });
+    } catch (err) {
+      console.error("AI methodology suggestions failed:", err);
+    }
+  }
+
+  const fallbackResult = `[ResearchBuddy Methodology Core - Safe Local Engine]
+Suggested Experimental Methodology trajectory:
+
+1. Spatial Vector Map Calibration
+   Map global observations into multi-dimensional spatial slots. Avoid direct coordinate overlays; instead utilize localized weight tensors.
+
+2. Empirical Convergence Check
+   Verify optimization gradients against boundary parameters. Check if your matched co-author's model stabilizes below 0.01 loss threshold.
+
+3. Cross-Validation Integration
+   Execute tests over validation datasets to prevent overfitting. Use a 70/30 split ratio across temporal segments.`;
+  return res.json({ result: fallbackResult });
+});
+
+app.post("/api/ai/literature", async (req, res) => {
+  if (!ACTIVE_SESSION_USER_ID) {
+    return res.status(401).json({ error: "Unauthorized session." });
+  }
+  const { prompt } = req.body;
+  
+  if (ai) {
+    try {
+      const gRes = await generateGeminiContent({
+        contents: `You are the ResearchBuddy AI Assistant, an elite scientific research model.
+        Provide structural roadmaps, milestones, or paper outline ideas based on the literature review needs of the user.
+        User Prompt: "${prompt || "Draft outline or calendar slots for joint publication."}"
+        
+        Outline 3-4 milestone objectives with logical timeline intervals. Keep it inspiring, structured, and focused on joint workspace outcomes.`,
+      });
+      return res.json({ result: gRes.text });
+    } catch (err) {
+      console.error("AI literature support failed:", err);
+    }
+  }
+
+  const fallbackResult = `[ResearchBuddy Literature Support - Safe Local Engine]
+Suggested Milestone Roadmap:
+
+- Milestone 1: Co-Author Consultation & Abstract Structure
+  (Timeline: Days 1-3) Agree on primary contributions, research goals, and core mathematical formulas.
+
+- Milestone 2: Background review & Related Citations
+  (Timeline: Days 4-7) Compile historical papers validating spatial raster structures.
+
+- Milestone 3: Results Synthesis & Draft Completion
+  (Timeline: Days 8-12) Consolidate figures, local tensor weights, and comparative accuracy graphs.`;
+  return res.json({ result: fallbackResult });
+});
+
+
+app.get("/api/workspaces/journey", (req, res) => {
+  if (!ACTIVE_SESSION_USER_ID) {
+    return res.status(401).json({ error: "Unauthorized session." });
+  }
+  const workspaceId = req.query.workspaceId as string;
+  if (!workspaceId) {
+    return res.status(400).json({ error: "Missing workspaceId query parameter." });
+  }
+  const journey = getOrCreateJourney(workspaceId);
+  return res.json({ journey });
+});
+
+app.post("/api/workspaces/journey", (req, res) => {
+  if (!ACTIVE_SESSION_USER_ID) {
+    return res.status(401).json({ error: "Unauthorized session." });
+  }
+  const { workspaceId, currentMilestoneIndex, milestones } = req.body;
+  if (!workspaceId) {
+    return res.status(400).json({ error: "Missing workspaceId." });
+  }
+  const journey = {
+    currentMilestoneIndex: currentMilestoneIndex !== undefined ? Number(currentMilestoneIndex) : 0,
+    milestones: milestones || []
+  };
+  JOURNEYS_DB.set(workspaceId, journey);
+  return res.json({ success: true, journey });
+});
+
+app.post("/api/ai/journey-audit", async (req, res) => {
+  if (!ACTIVE_SESSION_USER_ID) {
+    return res.status(401).json({ error: "Unauthorized session." });
+  }
+  const { workspaceId, activeMilestoneTitle, completedTasks, pendingTasks } = req.body;
+  const hypothesis = WORKSPACES_DB.find(w => w.id === workspaceId)?.research_hypothesis || "Developing cross-disciplinary integrations.";
+
+  const promptText = `You are the ResearchBuddy AI Assistant, an elite scientific research model.
+  Please perform an expert Academic Audit of the research team's current standing in their workspace.
+  
+  Active Phase: "${activeMilestoneTitle || "Phase 1"}"
+  Workspace Research Focus: "${hypothesis}"
+  
+  Completed checklist items in this phase:
+  ${completedTasks && completedTasks.length ? completedTasks.map((t: string) => `- ${t}`).join("\n") : "(None yet)"}
+  
+  Pending/uncompleted items in this phase:
+  ${pendingTasks && pendingTasks.length ? pendingTasks.map((t: string) => `- ${t}`).join("\n") : "(None yet)"}
+  
+  Provide a professional, critical, yet highly encouraging evaluation including:
+  1. Audit Evaluation Score / Green-light status: e.g. "Ready to progress" or "Needs refinement".
+  2. Concrete Suggestion / Missing Steps to secure publication-tier precision.
+  3. Short recommended next milestone action.
+  
+  Keep the critique direct, academic, and highly actionable.`;
+
+  if (ai) {
+    try {
+      const gRes = await generateGeminiContent({
+        contents: promptText,
+      });
+      return res.json({ result: gRes.text });
+    } catch (err) {
+      console.error("AI journey-audit failed:", err);
+    }
+  }
+
+  const fallbackAudit = `[ResearchBuddy Journey Auditor - Safe Local Engine]
+  
+🔴 STATUS: Needs Refinement
+  Your roadmap for "${activeMilestoneTitle || "Idea Formulation"}" is well-defined, but we strongly recommend securing peer formulation confirmation on mathematical boundary conditions before ticking off the core hypothesis.
+  
+Suggested next step:
+- Run a 10-minute brainstorming loop with your match on temporal convergence limits.
+- Confirm target LaTeX templates of IEEE/ACM format rules early.`;
+  return res.json({ result: fallbackAudit });
+});
+
+app.post("/api/ai/ideas", async (req, res) => {
+  if (!ACTIVE_SESSION_USER_ID) {
+    return res.status(401).json({ error: "Unauthorized session." });
+  }
+  const { concept, mode } = req.body;
+  const isDiscover = mode === "discover";
+
+  const systemPrompt = isDiscover
+    ? `You are the ResearchBuddy AI Novelty engine. The user has supplied a domain, field, or rough concept: "${concept || "Generative AI and Spatio-temporal mapping"}".
+       Your goal is to DISCOVER 3 extremely novel, publishable, and highly specific research ideas that are currently on the cutting edge of science.
+       For each idea, provide:
+       1. A spectacular, precise, academic Paper Title.
+       2. A brief 2-sentence Abstract mapping the problem and the proposed novel solution.
+       3. Suggested experimental methodology and potential open dataset source types.
+       Format clearly with clean subheaders and bullet points.`
+    : `You are the ResearchBuddy Academic Peer Reviewer. The user has supplied a draft research idea or abstract: "${concept}".
+       Your goal is to IMPROVE, CRITIQUE, and POLISH this research idea to maximize its chances of acceptance in top-tier journals (e.g., Nature, IEEE, ACM, MISQ).
+       Provide:
+       1. Core Critique: Identify potential loop-holes, common criticisms, or unaddressed control variables.
+       2. Strategic Upgrade: Propose specific mathematical formulations, novel layers, or evaluation criteria to strengthen the contribution.
+       3. Suggested Target Venues: Recommend 2-3 top journals/conferences that fit this upgraded scope.
+       Keep your feedback constructive, rigorous, and highly detailed.`;
+
+  if (ai) {
+    try {
+      const gRes = await generateGeminiContent({
+        contents: systemPrompt,
+      });
+      return res.json({ result: gRes.text });
+    } catch (err) {
+      console.error("AI ideas generation failed:", err);
+    }
+  }
+
+  const fallbackIdeas = isDiscover
+    ? `[ResearchBuddy AI Novelty Engine - Safe Local Engine]
+    
+💡 Discovery Idea 1: "Spatio-Temporal Graph Convolutions with Local Covariance Weighting"
+- Abstract: Traditional neural networks over-generalize local temporal features during large-scale grid mapping. We propose embedding localized weight matrices that synchronize dynamic spatial observations directly into the graph cell.
+- Method & Dataset: Realize SGD layer in PyPy; evaluate using NASA Land-Cover Tile Grids.
+
+💡 Discovery Idea 2: "Deep Reinforcement Learning for Dynamic Grid Coordination"
+- Abstract: Proposes an autonomous agent topology managing real-time packet-route coordination across mesh nodes under physical constraints.
+- Method & Dataset: OpenAI Gym simulation; execute validation using standard grid logs.`
+    : `[ResearchBuddy Academic Critic - Safe Local Engine]
+
+✓ Critique & Upgrade Plan for: "${concept || "Spatio-temporal analysis"}"
+
+1. Core Criticism:
+   - The proposed model assumes a static spatial matrix. Real-world conditions exhibit continuous fluid dynamics which would cause extreme gradient drift on larger datasets.
+
+2. Strategic Upgrade:
+   - Introduce an attention-guided localized Fluid Covariance Layer prior to tensor decomposition. This anchors dynamic drift and reduces overall loss threshold to < 0.008.
+
+3. Recommended Venues:
+   - IEEE Transactions on Pattern Analysis and Machine Intelligence (TPAMI)
+   - ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD)`;
+
+  return res.json({ result: fallbackIdeas });
+});
+
+// Delete Shared Post from cluster feed
+app.post("/api/discovery/posts/delete", (req, res) => {
+  if (!ACTIVE_SESSION_USER_ID) {
+    return res.status(401).json({ error: "Unauthorized session." });
+  }
+  const { postId } = req.body;
+  if (!postId) {
+    return res.status(400).json({ error: "Post ID is required." });
+  }
+  const idx = DISCOVERY_POSTS_DB.findIndex(p => p.id === postId);
+  if (idx !== -1) {
+    const post = DISCOVERY_POSTS_DB[idx];
+    if (post.authorId !== ACTIVE_SESSION_USER_ID) {
+      return res.status(403).json({ error: "You are not authorized to delete this post." });
+    }
+    DISCOVERY_POSTS_DB.splice(idx, 1);
+    return res.json({ success: true });
+  }
+  return res.status(404).json({ error: "Post not found." });
+});
+
 // Upvote shared paper (academic cap style)
 app.post("/api/discovery/posts/upvote", (req, res) => {
   if (!ACTIVE_SESSION_USER_ID) {
@@ -700,7 +1400,7 @@ app.get("/api/discovery/feed", async (req, res) => {
   const feed: any[] = [];
   const uncachedCandidates: any[] = [];
 
-  // Stage 1: Load from memory cache
+  // Stage 1: Load from memory cache or immediately compute fallback
   for (const candidate of candidatesList) {
     const cacheKey = `${currentUser.id}_${candidate.id}`;
     if (SEMANTIC_CACHE.has(cacheKey)) {
@@ -711,122 +1411,27 @@ app.get("/api/discovery/feed", async (req, res) => {
         aiInsight: cached.aiInsight
       });
     } else {
-      uncachedCandidates.push(candidate);
-    }
-  }
-
-  // Stage 2: Query Gemini ONLY for uncached candidates
-  if (ai && uncachedCandidates.length > 0) {
-    try {
-      const prompt = `
-        You are the ResearchBuddy Semantic Core. We are building an offline semantic teammate match engine.
-        Analyze our candidate database profiles against the active logged-in user:
-        Active User Name: ${currentUser.name}
-        Active User Background: ${currentUser.role}
-        Active User Intent: "${currentUser.intent}"
-        Active User Skills: ${currentUser.skills.join(", ")}
-
-        Compare them against these candidate profiles:
-        ${uncachedCandidates.map((c, i) => `${i + 1}. ID=${c.id}, Name=${c.name}, Field=${c.field}, About=${c.about}, Intent=${c.intent}`).join("\n")}
-
-        Analyze and return a JSON array with match scores (50-98%) and synergy insights (2 sentences max) for each candidate.
-        Format constraints: STRICTLY return a JSON array containing:
-        [
-          { "id": "candidate_id", "matchScore": number, "aiInsight": "insight text" }
-        ]
-        Do not add other text format notes.
-      `;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                id: { type: Type.STRING },
-                matchScore: { type: Type.NUMBER },
-                aiInsight: { type: Type.STRING }
-              },
-              required: ["id", "matchScore", "aiInsight"]
-            }
-          }
-        }
-      });
-
-      const responseText = response.text;
-      if (responseText) {
-        const matchesData = JSON.parse(responseText.trim());
-        for (const cand of uncachedCandidates) {
-          const matchedItem = matchesData.find((m: any) => m.id === cand.id);
-          const score = matchedItem ? Math.round(matchedItem.matchScore) : 85;
-          const insight = matchedItem ? matchedItem.aiInsight : "Strategic collaboration overlap in computer-aided methodology.";
-          
-          const cacheKey = `${currentUser.id}_${cand.id}`;
-          SEMANTIC_CACHE.set(cacheKey, { matchScore: score, aiInsight: insight });
-          
-          feed.push({
-            ...cand,
-            matchScore: score,
-            aiInsight: insight
-          });
-        }
-      }
-    } catch (e: any) {
-      const errMsg = e?.message || String(e);
-      console.log(`[Safe Fallback] Gemini API offline or rate-limited (${errMsg.substring(0, 80)}...). Processing via local high-spec rules.`);
-      
-      for (const cand of uncachedCandidates) {
-        let score = 80;
-        let insight = "There is solid foundation for cooperation on computational pipelines.";
-        
-        const preloadedFallbackList = DECIDED_FALLBACKS[currentUser.id] || DECIDED_FALLBACKS.sarah || [];
-        const staticItem = preloadedFallbackList.find((f: any) => f.id === cand.id);
-        
-        if (staticItem) {
-          score = staticItem.score;
-          insight = staticItem.insight;
-        } else {
-          const computed = calculateFallbackScoreAndInsight(currentUser, cand);
-          score = computed.matchScore;
-          insight = computed.aiInsight;
-        }
-
-        const cacheKey = `${currentUser.id}_${cand.id}`;
-        SEMANTIC_CACHE.set(cacheKey, { matchScore: score, aiInsight: insight });
-
-        feed.push({
-          ...cand,
-          matchScore: score,
-          aiInsight: insight
-        });
-      }
-    }
-  } else if (uncachedCandidates.length > 0) {
-    for (const cand of uncachedCandidates) {
+      // Calculate high-quality fallback score & insight immediately (sub-millisecond!)
       let score = 80;
       let insight = "There is solid foundation for cooperation on computational pipelines.";
       
       const preloadedFallbackList = DECIDED_FALLBACKS[currentUser.id] || DECIDED_FALLBACKS.sarah || [];
-      const staticItem = preloadedFallbackList.find((f: any) => f.id === cand.id);
+      const staticItem = preloadedFallbackList.find((f: any) => f.id === candidate.id);
       
       if (staticItem) {
         score = staticItem.score;
         insight = staticItem.insight;
       } else {
-        const computed = calculateFallbackScoreAndInsight(currentUser, cand);
+        const computed = calculateFallbackScoreAndInsight(currentUser, candidate);
         score = computed.matchScore;
         insight = computed.aiInsight;
       }
 
-      const cacheKey = `${currentUser.id}_${cand.id}`;
       SEMANTIC_CACHE.set(cacheKey, { matchScore: score, aiInsight: insight });
-
+      uncachedCandidates.push(candidate);
+      
       feed.push({
-        ...cand,
+        ...candidate,
         matchScore: score,
         aiInsight: insight
       });
@@ -836,7 +1441,70 @@ app.get("/api/discovery/feed", async (req, res) => {
   // Sort final response feed by match score descending
   feed.sort((a, b) => b.matchScore - a.matchScore);
 
-  return res.json({ feed });
+  // Respond immediately so the client loads within milliseconds!
+  res.json({ feed });
+
+  // Stage 2: Asynchronously update/refine the cache with Gemini AI in the background!
+  if (ai && uncachedCandidates.length > 0) {
+    (async () => {
+      try {
+        const prompt = `
+          You are the ResearchBuddy Semantic Core. We are building an offline semantic teammate match engine.
+          Analyze our candidate database profiles against the active logged-in user:
+          Active User Name: ${currentUser.name}
+          Active User Background: ${currentUser.role}
+          Active User Intent: "${currentUser.intent}"
+          Active User Skills: ${currentUser.skills.join(", ")}
+
+          Compare them against these candidate profiles:
+          ${uncachedCandidates.map((c, i) => `${i + 1}. ID=${c.id}, Name=${c.name}, Field=${c.field}, About=${c.about}, Intent=${c.intent}`).join("\n")}
+
+          Analyze and return a JSON array with match scores (50-98%) and synergy insights (2 sentences max) for each candidate.
+          Format constraints: STRICTLY return a JSON array containing:
+          [
+            { "id": "candidate_id", "matchScore": number, "aiInsight": "insight text" }
+          ]
+          Do not add other text format notes.
+        `;
+
+        const response = await generateGeminiContent({
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.STRING },
+                  matchScore: { type: Type.NUMBER },
+                  aiInsight: { type: Type.STRING }
+                },
+                required: ["id", "matchScore", "aiInsight"]
+              }
+            }
+          }
+        });
+
+        const responseText = response.text;
+        if (responseText) {
+          const matchesData = JSON.parse(responseText.trim());
+          for (const cand of uncachedCandidates) {
+            const matchedItem = matchesData.find((m: any) => m.id === cand.id);
+            if (matchedItem) {
+              const score = Math.round(matchedItem.matchScore);
+              const insight = matchedItem.aiInsight;
+              const cacheKey = `${currentUser.id}_${cand.id}`;
+              SEMANTIC_CACHE.set(cacheKey, { matchScore: score, aiInsight: insight });
+            }
+          }
+          console.log(`[Semantic Sync] Background Gemini validation completed & cache warmed for ${uncachedCandidates.length} profiles.`);
+        }
+      } catch (e: any) {
+        console.log(`[Semantic Sync] Background Gemini offline or skipped. Kept local precision fallback cache slots.`);
+      }
+    })();
+  }
 });
 
 // -------------------------------------------------------------
@@ -894,19 +1562,27 @@ app.post("/api/interact", (req, res) => {
     return res.json({ isMatch: false });
   }
 
-  // Check the maximum matches constraint rule for current user
+  // Check the maximum matches constraint rule for current user based on their subscription status
+  const currentUserProfile = USERS_DB.get(currentUserId);
+  const currentUserTier = currentUserProfile?.subscription_tier || "scholar";
+  const currentUserLimit = currentUserTier === "platinum" ? 4 : currentUserTier === "gold" ? 3 : 2;
+
   const user1Matches = MATCHES_DB.filter(m => m.user1Id === currentUserId || m.user2Id === currentUserId);
-  if (user1Matches.length >= 2) {
+  if (user1Matches.length >= currentUserLimit) {
     return res.status(400).json({ 
-      error: "Match slot limit exceeded! You already have a maximum of 2 active matches. Please exit a workspace to clear a slot." 
+      error: `Match limit reached! On the ${currentUserTier.toUpperCase()} tier, you can have a maximum of ${currentUserLimit} active workspaces. Clear slots or upgrade your tier to authorize more.` 
     });
   }
 
   // Check target user's matches constraint
+  const targetProfile = USERS_DB.get(targetId);
+  const targetTier = targetProfile?.subscription_tier || "scholar";
+  const targetLimit = targetTier === "platinum" ? 4 : targetTier === "gold" ? 3 : 2;
+
   const user2Matches = MATCHES_DB.filter(m => m.user1Id === targetId || m.user2Id === targetId);
-  if (user2Matches.length >= 2) {
+  if (user2Matches.length >= targetLimit) {
     return res.status(400).json({ 
-      error: "This researcher's workspace slots are full! They are currently engaged in 2 high-energy collaborations." 
+      error: `This scholar's active workspace slots are currently full.` 
     });
   }
 
@@ -931,18 +1607,55 @@ app.post("/api/interact", (req, res) => {
     
     MATCHES_DB.push(newMatch);
 
+    // Create a corresponding multi-user group Workspace
+    const workspaceId = matchId; // Seamless workspace tracking using the matchId
+    const workspaceName = `${currentUserProfile?.name || "Me"} & ${targetProfile?.name || "Peer"} Joint Lab`;
+    const spaceHypothesis = `Synthesizing neural paradigms in: ${currentUserProfile?.skills?.slice(0, 2).join(", ") || "Machine Learning"} paired with ${targetProfile?.skills?.slice(0, 2).join(", ") || "Domain Analytics"}.`;
+    
+    const newWS: Workspace = {
+      id: workspaceId,
+      project_name: workspaceName,
+      research_hypothesis: spaceHypothesis,
+      createdAt: new Date().toISOString()
+    };
+    WORKSPACES_DB.push(newWS);
+
+    // Add Workspace Membership records for user1 and user2
+    WORKSPACE_MEMBERS_DB.push({
+      workspaceId,
+      profileId: currentUserId,
+      role: currentUserProfile?.role || "Principal Investigator"
+    });
+    WORKSPACE_MEMBERS_DB.push({
+      workspaceId,
+      profileId: targetId,
+      role: targetProfile?.role || "Co-Author"
+    });
+
+    // Seed up to 2 other high-alignment advisory scholars from other presets for standard group scale (scales up to 4 participants)
+    const extraPeers = Array.from(USERS_DB.values()).filter(u => u.id !== currentUserId && u.id !== targetId);
+    let count = 0;
+    for (const p of extraPeers) {
+      if (count >= 2) break;
+      WORKSPACE_MEMBERS_DB.push({
+        workspaceId,
+        profileId: p.id,
+        role: "Advisory Scholar"
+      });
+      count++;
+    }
+
     // Initial onboarding message from matched system helper
-    const targetProfile = USERS_DB.get(targetId);
     MESSAGES_DB.push({
       id: `msg_init_${Date.now()}`,
       matchId,
       senderId: targetId,
       senderName: targetProfile ? targetProfile.name : "System Researcher",
-      text: "Hello! It's a mutual match! I saw your detailed intent portfolio on the platform, and I believe we have excellent synergies to explore. Lets get started on the first drafting milestones!",
+      text: "Hello! Our mutual handshake is established! A new 4-person joint project workspace was spawned for us. Let's outline the literature review index and run some automated model summaries!",
       createdAt: new Date().toISOString()
     });
 
-    console.log(`Match unlocked! ID=${matchId} between ${currentUserId} and ${targetId}`);
+    console.log(`Match unlocked! Workspace spawned ID=${matchId} with 4 participants initialized.`);
     return res.json({ isMatch: true, match: newMatch, partner: targetProfile });
   }
 
@@ -959,6 +1672,10 @@ app.get("/api/matches", (req, res) => {
   }
 
   const currentUserId = ACTIVE_SESSION_USER_ID;
+  const userProfile = USERS_DB.get(currentUserId);
+  const userTier = userProfile?.subscription_tier || "scholar";
+  const userLimit = userTier === "platinum" ? 4 : userTier === "gold" ? 3 : 2;
+
   const userMatches = MATCHES_DB.filter(m => m.user1Id === currentUserId || m.user2Id === currentUserId);
 
   // Map to targets profiles
@@ -971,13 +1688,13 @@ app.get("/api/matches", (req, res) => {
       partner: partnerProfile ? {
         ...partnerProfile,
         matchScore: 94,
-        aiInsight: "Seamless synergy unlocked! You are both now in an active dual-slot chat channel."
+        aiInsight: "Seamless synergy unlocked! You are both now in an active joint collab workspace."
       } : null
     };
   }).filter(m => m.partner !== null);
 
-  // Render maximum active of 2 items
-  return res.json({ matches: activeMatchesList.slice(0, 2) });
+  // Slice results dynamically in accordance to subscription constraints
+  return res.json({ matches: activeMatchesList.slice(0, userLimit) });
 });
 
 // Close a Match / Free up Slot
@@ -994,7 +1711,19 @@ app.post("/api/matches/close", (req, res) => {
   if (idx !== -1) {
     const matchedRecord = MATCHES_DB[idx];
     MATCHES_DB.splice(idx, 1);
-    console.log(`Match ${matchId} was closed to unlock a slot.`);
+
+    // Also clean up WORKSPACES_DB and WORKSPACE_MEMBERS_DB to permanently close/leave the workspace
+    const wsIdx = WORKSPACES_DB.findIndex(w => w.id === matchId);
+    if (wsIdx !== -1) {
+      WORKSPACES_DB.splice(wsIdx, 1);
+    }
+    for (let i = WORKSPACE_MEMBERS_DB.length - 1; i >= 0; i--) {
+      if (WORKSPACE_MEMBERS_DB[i].workspaceId === matchId) {
+        WORKSPACE_MEMBERS_DB.splice(i, 1);
+      }
+    }
+
+    console.log(`Match ${matchId} was closed to unlock a slot. Cleaned up corresponding workspaces & memberships.`);
     return res.json({ success: true, freedPartnerId: matchedRecord.user1Id === ACTIVE_SESSION_USER_ID ? matchedRecord.user2Id : matchedRecord.user1Id });
   }
 

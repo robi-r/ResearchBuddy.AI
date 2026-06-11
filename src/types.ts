@@ -45,6 +45,11 @@ export interface MatchRequest {
   intent: string;
   commitment?: string;
   avatar?: string;
+  institution?: string;
+  field?: string;
+  hIndex?: number;
+  citations?: string;
+  publications?: Array<{ title: string; journal: string; year: string }>;
 }
 
 export interface MatchResult {

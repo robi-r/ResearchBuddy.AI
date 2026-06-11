@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { GraduationCap, Send, PlusCircle, MessageSquare, Award, Orbit, Info } from "lucide-react";
+import { GraduationCap, Send, PlusCircle, MessageSquare, Award, Orbit, Info, Lightbulb, Sparkles } from "lucide-react";
 
 interface Comment {
   id: string;
@@ -27,9 +27,10 @@ interface SharedPost {
 
 interface DiscoveryViewProps {
   currentUser: any;
+  onViewProfile?: (id: string) => void;
 }
 
-export function DiscoveryView({ currentUser }: DiscoveryViewProps) {
+export function DiscoveryView({ currentUser, onViewProfile }: DiscoveryViewProps) {
   const [posts, setPosts] = useState<SharedPost[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -40,6 +41,13 @@ export function DiscoveryView({ currentUser }: DiscoveryViewProps) {
   const [newAbstract, setNewAbstract] = useState("");
   const [newCollabGoal, setNewCollabGoal] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // AI Ideas Spark Generator state
+  const [ideasMode, setIdeasMode] = useState<"discover" | "improve">("discover");
+  const [ideasConcept, setIdeasConcept] = useState("");
+  const [ideasResult, setIdeasResult] = useState("");
+  const [ideasRunning, setIdeasRunning] = useState(false);
+  const [showIncubator, setShowIncubator] = useState(false);
 
   // Comments state per post Id
   const [commentTextMap, setCommentTextMap] = useState<{ [postId: string]: string }>({});
@@ -165,6 +173,29 @@ export function DiscoveryView({ currentUser }: DiscoveryViewProps) {
     }
   };
 
+  const handleDeletePost = async (postId: string) => {
+    if (!window.confirm("Are you sure you want to permanently remove this representative research abstract from the cluster discovery feed?")) {
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/discovery/posts/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId })
+      });
+
+      if (response.ok) {
+        setPosts(posts.filter(p => p.id !== postId));
+      } else {
+        const data = await response.json();
+        alert(data.error || "Failed to delete post");
+      }
+    } catch (err) {
+      console.error("Failed to delete post:", err);
+    }
+  };
+
   return (
     <div className="max-w-xl mx-auto py-4 px-4 space-y-6 animate-fade-in pb-20">
       {/* Tab Header Banner */}
@@ -182,6 +213,112 @@ export function DiscoveryView({ currentUser }: DiscoveryViewProps) {
             Publish ongoing project abstracts, draft papers, or open publications. Call for peer review or query specialized teams directly in the cluster feed.
           </p>
         </div>
+      </div>
+
+      {/* AI RESEARCH IDEA SPARK & INCUBATOR GENERATOR */}
+      <div className="bg-slate-50 border border-slate-205 rounded-3xl p-5 shadow-xs space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-slate-805">
+            <Lightbulb className="w-5 h-5 text-indigo-600 animate-pulse" />
+            <div>
+              <h3 className="text-xs font-black uppercase text-slate-900 tracking-wider">AI Idea Spark Tool</h3>
+              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wide leading-none">Discover or Improve academic ideas</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowIncubator(!showIncubator)}
+            className="text-xs font-black text-indigo-600 bg-white border border-slate-200 hover:bg-slate-100 px-3 py-1 rounded-xl shadow-xs cursor-pointer duration-150"
+            type="button"
+          >
+            {showIncubator ? "Hide Tool" : "Open Incubator"}
+          </button>
+        </div>
+
+        {showIncubator && (
+          <div className="space-y-4 pt-1 animate-fade-in">
+            {/* Mode Selector */}
+            <div className="flex gap-2 bg-slate-100 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => { setIdeasMode("discover"); setIdeasResult(""); }}
+                className={`flex-1 py-1.5 text-[9px] font-mono font-black uppercase rounded-lg border-none cursor-pointer duration-100 ${
+                  ideasMode === "discover" ? "bg-white text-indigo-700 shadow-xs animate-fade-in" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                Discover Concept
+              </button>
+              <button
+                type="button"
+                onClick={() => { setIdeasMode("improve"); setIdeasResult(""); }}
+                className={`flex-1 py-1.5 text-[10px] font-mono font-black uppercase rounded-lg border-none cursor-pointer duration-100 ${
+                  ideasMode === "improve" ? "bg-white text-indigo-700 shadow-xs animate-fade-in" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                Improve / Polish Draft
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="incubator-concept" className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                {ideasMode === "discover" ? "Concept Field/Domain" : "Your Draft Project Abstract/Hypothesis"}
+              </label>
+              <textarea
+                id="incubator-concept"
+                placeholder={
+                  ideasMode === "discover" 
+                    ? "e.g. Spatio-temporal graph networks, continuous fluid dynamics, carbon prediction..."
+                    : "e.g. Paste your draft study concept outline to receive constructive upgrades & suggestions..."
+                }
+                value={ideasConcept}
+                onChange={(e) => setIdeasConcept(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-2xl p-3 text-xs outline-none focus:border-slate-800 focus:bg-white text-slate-900 font-semibold shadow-2xs font-sans"
+                rows={3}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={async () => {
+                setIdeasRunning(true);
+                setIdeasResult("");
+                try {
+                  const response = await fetch("/api/ai/ideas", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ concept: ideasConcept, mode: ideasMode })
+                  });
+                  if (response.ok) {
+                    const data = await response.json();
+                    setIdeasResult(data.result);
+                  } else {
+                    const errData = await response.json();
+                    setIdeasResult(`Error requesting Spark: ${errData.error || "Please try again later."}`);
+                  }
+                } catch (err) {
+                  console.error(err);
+                  setIdeasResult("Network error. Please try again.");
+                } finally {
+                  setIdeasRunning(false);
+                }
+              }}
+              disabled={ideasRunning}
+              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-mono font-black uppercase cursor-pointer border-none shadow duration-150 disabled:opacity-50 flex items-center justify-center gap-1.5"
+            >
+              <Sparkles className="w-4 h-4 text-white fill-white" />
+              <span>{ideasRunning ? "Sieving data archives..." : ideasMode === "discover" ? "Generate Cutting-edge Ideas" : "Peer Review & Polish"}</span>
+            </button>
+
+            {/* Generated results console */}
+            {ideasResult && (
+              <div className="space-y-1.5 animate-fade-in pt-1">
+                <span className="text-[8.5px] font-mono uppercase tracking-widest text-slate-400 font-extrabold block">AI Spark Output</span>
+                <div className="bg-slate-950 border border-slate-800 p-4.5 rounded-2xl text-slate-100 text-xs font-mono leading-relaxed whitespace-pre-wrap max-h-[280px] overflow-y-auto shadow-inner">
+                  {ideasResult}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Share / Creative publishing trigger box */}
@@ -312,17 +449,37 @@ export function DiscoveryView({ currentUser }: DiscoveryViewProps) {
                 {/* Author context line */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-full overflow-hidden border border-slate-200">
+                    <div 
+                      className="w-9 h-9 rounded-full overflow-hidden border border-slate-200 cursor-pointer hover:scale-105 duration-100"
+                      onClick={() => onViewProfile && onViewProfile(post.authorId)}
+                      title="Inspect researcher profile stats"
+                    >
                       <img src={post.authorAvatar} alt={post.authorName} className="w-full h-full object-cover" />
                     </div>
                     <div>
-                      <p className="text-xs font-black text-slate-900 leading-tight">{post.authorName}</p>
+                      <p 
+                        className="text-xs font-black text-slate-900 leading-tight cursor-pointer hover:underline hover:text-indigo-600"
+                        onClick={() => onViewProfile && onViewProfile(post.authorId)}
+                      >
+                        {post.authorName}
+                      </p>
                       <p className="text-[9px] text-slate-400 font-semibold uppercase">{post.authorInstitution}</p>
                     </div>
                   </div>
-                  <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-full uppercase">
-                    {post.field}
-                  </span>
+                  <div className="flex items-center gap-15">
+                    {post.authorId === currentUser?.id && (
+                      <button
+                        onClick={() => handleDeletePost(post.id)}
+                        className="px-2 py-0.5 text-[9px] font-black tracking-wide text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-600 rounded-lg border border-rose-200 duration-150 cursor-pointer shadow-sm uppercase shrink-0"
+                        title="Permanently remove your post from feed"
+                      >
+                        🗑 Delete
+                      </button>
+                    )}
+                    <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-full uppercase">
+                      {post.field}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Main post contents */}

@@ -11,19 +11,44 @@ import { ChatView } from "./components/ChatView";
 import { ProfileView } from "./components/ProfileView";
 import { DatabaseMigrations } from "./components/DatabaseMigrations";
 import { ResearchBuddyLogo } from "./components/ResearchBuddyLogo";
+import { ProfileModal } from "./components/ProfileModal";
 import { motion, AnimatePresence } from "motion/react";
 
 export default function App() {
   const [userSession, setUserSession] = useState<any | null>(null);
+  const [showBillingModal, setShowBillingModal] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
   const [currentTab, setCurrentTab] = useState<"match" | "discovery" | "collabs" | "chat" | "profile">("match");
   const [activeMatches, setActiveMatches] = useState<Match[]>([]);
   const [likesCount, setLikesCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [viewProfileId, setViewProfileId] = useState<string | null>(null);
 
   // Match Success Visual overlay state
   const [matchedPartner, setMatchedPartner] = useState<Profile | null>(null);
+
+  const handleUpgrade = async (tier: "scholar" | "gold" | "platinum") => {
+    setUpgrading(true);
+    try {
+      const res = await fetch("/api/profile/upgrade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier })
+      });
+      if (res.ok) {
+        const result = await res.json();
+        setUserSession(result.user);
+        await refreshMatchesAndLikes();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUpgrading(false);
+      setShowBillingModal(false);
+    }
+  };
 
   // Check auth session on startup
   const checkAuthStatus = async () => {
@@ -111,7 +136,12 @@ export default function App() {
             interests: onboardingData.interests,
             intent: onboardingData.intent,
             commitment: onboardingData.commitment,
-            avatar: onboardingData.avatar
+            avatar: onboardingData.avatar,
+            institution: onboardingData.institution,
+            field: onboardingData.field,
+            hIndex: onboardingData.hIndex,
+            citations: onboardingData.citations,
+            publications: onboardingData.publications
           }
         : {
             email: `${onboardingData.name.toLowerCase().replace(/\s+/g, "")}@researchbuddy.edu`,
@@ -122,7 +152,12 @@ export default function App() {
             skills: onboardingData.skills,
             interests: onboardingData.interests,
             commitment: onboardingData.commitment,
-            avatar: onboardingData.avatar
+            avatar: onboardingData.avatar,
+            institution: onboardingData.institution,
+            field: onboardingData.field,
+            hIndex: onboardingData.hIndex,
+            citations: onboardingData.citations,
+            publications: onboardingData.publications
           };
 
       const response = await fetch(url, {
@@ -229,7 +264,7 @@ export default function App() {
                   </span>
                 )}
                 <span className="ml-1.5 bg-slate-200 text-slate-700 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded leading-none">
-                  {activeMatches.length} / 2
+                  {activeMatches.length} / {userSession?.subscription_tier === "platinum" ? 4 : userSession?.subscription_tier === "gold" ? 3 : 2}
                 </span>
               </button>
 
@@ -258,10 +293,49 @@ export default function App() {
           {/* Right Action Widgets */}
           <div className="flex items-center gap-2.5">
             {userSession ? (
-              <div className="flex items-center gap-2.5">
-                <span className="hidden lg:inline bg-slate-100 border border-slate-200 text-slate-700 font-bold px-3 py-1 rounded-lg text-[10px] font-mono leading-none font-sans">
-                  User: {userSession.name}
-                </span>
+              <div className="flex items-center gap-2">
+                {userSession.subscription_tier === "platinum" ? (
+                  <button
+                    onClick={() => setShowBillingModal(true)}
+                    className="flex items-center gap-1 bg-gradient-to-r from-indigo-600 via-purple-700 to-pink-600 text-white px-3 py-1.5 rounded-full text-[10px] font-mono font-black scale-95 shadow-md shrink-0 cursor-pointer border-none hover:scale-100 duration-150 animate-pulse"
+                    title="Click to manage subscription tier / Downgrade / Upgrade"
+                  >
+                    <Sparkles className="w-3 h-3 text-white fill-white animate-spin-slow" />
+                    <span>PLATINUM PI</span>
+                  </button>
+                ) : userSession.subscription_tier === "gold" ? (
+                  <button
+                    onClick={() => setShowBillingModal(true)}
+                    className="flex items-center gap-1 bg-gradient-to-r from-amber-500 to-yellow-600 text-white px-3 py-1.5 rounded-full text-[10px] font-mono font-black scale-95 shadow-md shrink-0 cursor-pointer border-none hover:scale-100 duration-150"
+                    title="Click to manage subscription tier / Downgrade / Upgrade"
+                  >
+                    <Sparkles className="w-3 h-3 text-white fill-white animate-spin-slow" />
+                    <span>GOLD PI</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowBillingModal(true)}
+                    className="flex items-center gap-1 bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 px-3.5 py-1.5 rounded-full text-[10px] font-sans font-black scale-95 hover:scale-100 duration-150 border-none cursor-pointer shadow animate-bounce shrink-0"
+                    title="Click to upgrade"
+                  >
+                    <Sparkles className="w-3 h-3 text-slate-950 fill-slate-950" />
+                    <span>Upgrade</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setViewProfileId(userSession.id)}
+                  className="flex items-center gap-1.5 hover:bg-slate-100 p-0.5 px-2 py-1 rounded-xl border border-slate-200 duration-150 cursor-pointer bg-slate-50 text-left text-slate-705 shrink-0"
+                  title="Click to view your profile and stats"
+                >
+                  <img
+                    src={userSession.avatar || "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150&auto=format&fit=crop"}
+                    alt={userSession.name}
+                    className="w-5.5 h-5.5 rounded-full object-cover border border-slate-300"
+                  />
+                  <span className="hidden lg:inline text-[9px] font-mono leading-none uppercase font-black text-slate-700">
+                    {userSession.name}
+                  </span>
+                </button>
                 <button
                   onClick={handleSignOut}
                   className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg duration-150 border-none cursor-pointer flex items-center justify-center bg-transparent"
@@ -345,6 +419,119 @@ export default function App() {
 
       {/* Main Sandbox Layout Area router */}
       <main className="flex-grow pt-4 relative z-10 w-full">
+
+        {/* PREMIUM SUBSCRIPTION BILLING UPGRADE MODAL */}
+        {showBillingModal && (
+          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-[60] flex items-center justify-center p-4">
+            <div className="bg-white border border-slate-200 rounded-[28px] max-w-2xl w-full overflow-hidden shadow-2xl relative animate-scale-up text-slate-900">
+              
+              <div className="bg-slate-900 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 relative">
+                <button
+                  onClick={() => setShowBillingModal(false)}
+                  className="absolute top-4 right-4 text-white hover:text-slate-200 text-xs font-bold bg-white/10 hover:bg-white/20 p-1.5 px-3 rounded-full cursor-pointer border-none"
+                >
+                  ✕ Close
+                </button>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-amber-400 uppercase tracking-widest leading-none">
+                    <Sparkles className="w-4 h-4 fill-amber-400" />
+                    <span>PI Subscription Hub</span>
+                  </div>
+                  <h3 className="font-serif text-xl font-bold">ResearchBuddy Tier Upgrades</h3>
+                  <p className="text-[11px] text-slate-350">Choose between Gold and Platinum tiers for maximum co-author matching scaling.</p>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-5">
+                <p className="text-xs text-slate-600 leading-relaxed font-semibold">
+                  Unlock dynamic workspace limits, custom scaling capacity constraints up to 4 co-authors, and activate the complete RAG-powered AI Research Assistant Ecosystem directly.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Scholar */}
+                  <div className="border border-slate-150 rounded-2xl bg-slate-50 p-4 space-y-2 relative flex flex-col justify-between">
+                    <div>
+                      <span className="text-[8px] font-mono font-extrabold text-slate-400 uppercase tracking-widest">Active</span>
+                      <div className="font-serif text-sm font-bold text-slate-755 mt-1">Scholar (Free)</div>
+                      <div className="text-lg font-mono font-black text-slate-900">$0<span className="text-[9px] font-sans font-bold text-slate-400"> / forever</span></div>
+                      <ul className="space-y-1 pt-1.5 text-[9px] text-slate-500 font-bold list-none pl-0">
+                        <li>• Max 2 joint active laboratories</li>
+                        <li>• Hardlocked size limit of 2</li>
+                        <li>• AI Assistant is blurred/locked</li>
+                      </ul>
+                    </div>
+                    {userSession?.subscription_tier === "scholar" || !userSession?.subscription_tier ? (
+                      <div className="text-[10px] text-slate-400 bg-slate-100 border border-slate-200 py-1.5 rounded-lg font-bold text-center mt-4">Current Active Tier</div>
+                    ) : (
+                      <button
+                        onClick={async () => handleUpgrade("scholar")}
+                        disabled={upgrading}
+                        className="w-full mt-4 py-2 bg-slate-200 hover:bg-slate-350 text-slate-700 rounded-lg text-[10px] font-mono font-black uppercase cursor-pointer border-none shadow duration-150 disabled:opacity-50"
+                      >
+                        {upgrading ? "Switching..." : "Demote to Scholar"}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Gold */}
+                  <div className="border-2 border-amber-500/40 rounded-2xl bg-amber-50/5 p-4 space-y-2 relative flex flex-col justify-between shadow-sm">
+                    <div>
+                      <span className="absolute top-2.5 right-2 px-1.5 py-0.5 bg-amber-100/90 text-amber-800 rounded font-mono text-[8px] font-extrabold tracking-widest uppercase">Popular</span>
+                      <div className="font-serif text-sm font-black text-slate-850 mt-1">Gold PI</div>
+                      <div className="text-lg font-mono font-black text-amber-700">$6 <span className="text-[10px] text-amber-600 font-sans font-medium hover:underline">(~700 BDT)</span><span className="text-[9px] font-sans font-bold text-slate-400"> / user / mo</span></div>
+                      <ul className="space-y-1 pt-1.5 text-[9px] text-slate-600 font-bold list-none pl-0">
+                        <li className="text-amber-805">✓ 3 active joint workspaces</li>
+                        <li className="text-amber-805">✓ Team capacity scaling up to 3</li>
+                        <li className="text-emerald-700 animate-pulse">✓ Paper Sum + Dataset tools</li>
+                      </ul>
+                    </div>
+
+                    {userSession?.subscription_tier === "gold" ? (
+                      <div className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 py-1.5 rounded-lg font-mono font-black text-center mt-4">Current Active Tier</div>
+                    ) : (
+                      <button
+                        onClick={async () => handleUpgrade("gold")}
+                        disabled={upgrading}
+                        className="w-full mt-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[10px] font-mono font-black uppercase cursor-pointer border-none shadow duration-150 disabled:opacity-50"
+                      >
+                        {upgrading ? "Upgrading..." : userSession?.subscription_tier === "platinum" ? "Downgrade to Gold" : "Select Gold"}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Platinum */}
+                  <div className="border-2 border-indigo-500/50 rounded-2xl bg-indigo-50/10 p-4 space-y-2 relative flex flex-col justify-between shadow-md">
+                    <div>
+                      <span className="absolute top-2.5 right-2 px-1.5 py-0.5 bg-indigo-100 text-indigo-750 rounded font-mono text-[8px] font-extrabold tracking-widest uppercase">Elite</span>
+                      <div className="font-serif text-sm font-black text-indigo-950 mt-1">Platinum PI</div>
+                      <div className="text-lg font-mono font-black text-indigo-700">$10 <span className="text-[10px] text-indigo-600 font-sans font-medium hover:underline">(~1,170 BDT)</span><span className="text-[9px] font-sans font-bold text-slate-400"> / user / mo</span></div>
+                      <ul className="space-y-1 pt-1.5 text-[9px] text-slate-600 font-bold list-none pl-0">
+                        <li className="text-indigo-850 font-black">✓ 4 active joint workspaces</li>
+                        <li className="text-indigo-850 font-black">✓ Max capacity scaling to 4</li>
+                        <li className="text-indigo-850 font-black">✓ ALL AI Copilot tools unlocked</li>
+                        <li className="text-emerald-700 font-bold">✓ Global review coverage</li>
+                      </ul>
+                    </div>
+
+                    {userSession?.subscription_tier === "platinum" ? (
+                      <div className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-200 py-1.5 rounded-lg font-mono font-black text-center mt-4">Current Active Tier</div>
+                    ) : (
+                      <button
+                        onClick={async () => handleUpgrade("platinum")}
+                        disabled={upgrading}
+                        className="w-full mt-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-mono font-black uppercase cursor-pointer border-none shadow duration-150 disabled:opacity-50"
+                      >
+                        {upgrading ? "Upgrading..." : "Select Platinum"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+        )}
         
         {/* SQL migrations spec drawer dialog modal */}
         {showSettings && (
@@ -410,12 +597,14 @@ export default function App() {
                         currentUser={userSession}
                         activeMatchCount={activeMatches.length}
                         onMatchSuccess={handleMatchSuccessTrigger}
+                        onViewProfile={setViewProfileId}
                       />
                     )}
 
                     {currentTab === "discovery" && (
                       <DiscoveryView
                         currentUser={userSession}
+                        onViewProfile={setViewProfileId}
                       />
                     )}
 
@@ -428,25 +617,30 @@ export default function App() {
                         activeMatchCount={activeMatches.length}
                         onMatchSuccess={handleMatchSuccessTrigger}
                         onRefresh={refreshMatchesAndLikes}
+                        onSwipeJoin={() => setCurrentTab("match")}
+                        onViewProfile={setViewProfileId}
+                      />
+                    )}
+
+                    {currentTab === "chat" && (
+                      <ChatView
+                        currentUser={userSession}
+                        activeMatches={activeMatches}
+                        onViewProfile={setViewProfileId}
+                        onTriggerUpgrade={() => setShowBillingModal(true)}
+                        onCloseMatchSlot={handleMatchSlotTerminated}
+                      />
+                    )}
+
+                    {currentTab === "profile" && (
+                      <ProfileView
+                        currentUser={userSession}
+                        onUpdateUser={(updatedUser) => {
+                          setUserSession(updatedUser);
+                        }}
                       />
                     )}
                   </>
-                )}
-
-                {currentTab === "chat" && (
-                  <ChatView
-                    currentUser={userSession}
-                    activeMatches={activeMatches}
-                  />
-                )}
-
-                {currentTab === "profile" && (
-                  <ProfileView
-                    currentUser={userSession}
-                    onUpdateUser={(updatedUser) => {
-                      setUserSession(updatedUser);
-                    }}
-                  />
                 )}
               </div>
             )}
@@ -544,6 +738,8 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ProfileModal profileId={viewProfileId} onClose={() => setViewProfileId(null)} />
 
     </div>
   );

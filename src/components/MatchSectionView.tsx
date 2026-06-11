@@ -7,9 +7,10 @@ interface MatchSectionViewProps {
   currentUser: any;
   activeMatchCount: number;
   onMatchSuccess: (partner: Profile) => void;
+  onViewProfile?: (id: string) => void;
 }
 
-export function MatchSectionView({ currentUser, activeMatchCount, onMatchSuccess }: MatchSectionViewProps) {
+export function MatchSectionView({ currentUser, activeMatchCount, onMatchSuccess, onViewProfile }: MatchSectionViewProps) {
   const [feed, setFeed] = useState<Profile[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -165,16 +166,18 @@ export function MatchSectionView({ currentUser, activeMatchCount, onMatchSuccess
                 opacity: 0, 
                 transition: { duration: 0.3 } 
               }}
-              className="bg-white border-2 border-slate-200/95 rounded-[28px] shadow-sm hover:shadow-md transition-shadow p-6 space-y-6"
+              onClick={() => onViewProfile?.(currentProfile.id)}
+              className="bg-white border-2 border-slate-200/95 hover:border-indigo-300 rounded-[28px] shadow-sm hover:shadow-md transition-all p-6 space-y-6 cursor-pointer group relative"
+              title="Click anywhere to inspect detailed profile & scientific publications"
             >
               {/* Profile Header Block */}
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-14 h-14 rounded-full border border-slate-200 overflow-hidden bg-slate-50 flex-shrink-0">
+                  <div className="w-14 h-14 rounded-full border border-slate-200 overflow-hidden bg-slate-50 flex-shrink-0 group-hover:scale-105 duration-200">
                     <img src={currentProfile.avatar} alt={currentProfile.name} className="w-full h-full object-cover" />
                   </div>
                   <div>
-                    <h3 className="font-sans font-black text-lg text-slate-950 leading-tight">
+                    <h3 className="font-sans font-black text-lg text-slate-950 leading-tight group-hover:text-indigo-650 duration-150">
                       {currentProfile.name}
                     </h3>
                     <p className="text-[11px] font-semibold text-slate-550 max-w-[190px] truncate leading-normal">
@@ -188,13 +191,18 @@ export function MatchSectionView({ currentUser, activeMatchCount, onMatchSuccess
 
                 {/* Match Vector Metric */}
                 <div className="flex flex-col items-end">
-                  <span className="text-[10px] font-extrabold text-[#745c00] bg-[#fef9c3] px-2.5 py-1 rounded-full border border-[#fef08a]">
+                  <span className="text-[10px] font-extrabold text-[#745c00] bg-[#fef9c3] px-2.5 py-1 rounded-full border border-[#fef08a] group-hover:bg-[#fef08a] transition-colors">
                     🏆 {currentProfile.matchScore}% Synergy
                   </span>
                   <p className="text-[9px] font-mono text-slate-400 mt-1 uppercase">
                     Cosine Diff 0.{currentProfile.matchScore}
                   </p>
                 </div>
+              </div>
+
+              {/* View details notice bar */}
+              <div className="text-center py-1 bg-indigo-50/50 border border-indigo-100/60 rounded-xl text-[9px] font-mono font-black text-indigo-700 uppercase tracking-wider group-hover:bg-indigo-100/80 duration-150">
+                🔍 Click card to inspect publications & experience
               </div>
 
               {/* Publication Highlight / Journal metrics */}

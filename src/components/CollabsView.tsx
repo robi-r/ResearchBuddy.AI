@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Check, ShieldCheck, Power, FolderLock, Sparkles, GraduationCap, ShieldAlert } from "lucide-react";
+import { Check, ShieldCheck, Power, FolderLock, Sparkles, GraduationCap, ShieldAlert, User, Compass } from "lucide-react";
 import { Match, Profile } from "../types";
 import { motion } from "motion/react";
 
@@ -11,6 +11,8 @@ interface CollabsViewProps {
   activeMatchCount: number;
   onMatchSuccess: (partner: Profile) => void;
   onRefresh: () => void;
+  onSwipeJoin?: () => void;
+  onViewProfile?: (id: string) => void;
 }
 
 export function CollabsView({
@@ -20,13 +22,18 @@ export function CollabsView({
   onCloseMatchSlot,
   activeMatchCount,
   onMatchSuccess,
-  onRefresh
+  onRefresh,
+  onSwipeJoin,
+  onViewProfile
 }: CollabsViewProps) {
   const [likers, setLikers] = useState<Profile[]>([]);
   const [loadingLikes, setLoadingLikes] = useState(true);
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [closingId, setClosingId] = useState<string | null>(null);
   const [errorToast, setErrorToast] = useState<string | null>(null);
+
+  const userTier = currentUser?.subscription_tier || "scholar";
+  const maxSlots = userTier === "platinum" ? 4 : userTier === "gold" ? 3 : 2;
 
   const fetchLikers = async () => {
     try {
@@ -47,8 +54,8 @@ export function CollabsView({
   }, [currentUser, activeMatchCount]);
 
   const handleConnect = async (target: Profile) => {
-    if (activeMatchCount >= 2) {
-      setErrorToast("Match slot limit exceeded! You already have a maximum of 2 active collaborations. Please finalize and close an existing workspace tab before accepting new collab requests.");
+    if (activeMatchCount >= maxSlots) {
+      setErrorToast(`Match slot limit exceeded! On the ${userTier.toUpperCase()} tier, you already have a maximum of ${maxSlots} active collaborations. Please finalize and close an existing workspace tab or upgrade your tier to accept new collab requests.`);
       setTimeout(() => setErrorToast(null), 5000);
       return;
     }
@@ -70,13 +77,12 @@ export function CollabsView({
 
       const result = await response.json();
       if (result.isMatch) {
-        onMatchSuccess(target);
-        fetchLikers();
-        onRefresh();
+         onMatchSuccess(target);
+         fetchLikers();
+         onRefresh();
       } else {
-        // Just single connection requested, refresh listings
-        fetchLikers();
-        onRefresh();
+         fetchLikers();
+         onRefresh();
       }
     } catch (err) {
       console.error("Collab accept failing:", err);
@@ -105,15 +111,16 @@ export function CollabsView({
     }
   };
 
-  const slot1 = activeMatches[0] || null;
-  const slot2 = activeMatches[1] || null;
-  const reachesLimit = activeMatchCount >= 2;
+  // Generate slots array based on max capacity rules
+  const slots = Array.from({ length: maxSlots }).map((_, idx) => activeMatches[idx] || null);
+  const reachesLimit = activeMatchCount >= maxSlots;
 
   return (
-    <div className="max-w-md mx-auto py-4 px-4 space-y-6 animate-fade-in pb-16">
+    <div className="max-w-md mx-auto py-4 px-4 space-y-6 animate-fade-in pb-16 text-slate-900">
+      
       {/* Dynamic Error Toast Notification */}
       {errorToast && (
-        <div className="fixed top-20 left-4 right-4 md:max-w-md md:mx-auto bg-slate-900 border border-slate-705 text-white p-4 rounded-xl shadow-2xl z-50 flex items-center gap-3 animate-slide-in">
+        <div className="fixed top-20 left-4 right-4 md:max-w-md md:mx-auto bg-slate-900 border border-slate-700 text-white p-4 rounded-xl shadow-2xl z-50 flex items-center gap-3 animate-slide-in">
           <ShieldAlert className="w-5 h-5 text-rose-500 flex-shrink-0" />
           <p className="text-xs font-semibold leading-normal">{errorToast}</p>
           <button
@@ -129,113 +136,92 @@ export function CollabsView({
       <header className="space-y-1">
         <h2 className="font-sans font-black text-xl text-slate-900">Your Collaborations</h2>
         <p className="text-xs font-semibold text-slate-500 leading-normal">
-          Manage your active research agreements and review incoming collaboration requests. Workspaces are limited to 2 active slots to ensure high co-author speed and engagement.
+          Manage your active research agreements and review incoming collaboration requests. Active workspaces are bound to co-author subscription limitations.
         </p>
       </header>
 
       {/* Section 1: Active Workspace Slots */}
       <section className="bg-white border border-slate-200 rounded-[24px] p-5 shadow-sm space-y-4">
         <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Active Workspace Slots (Max 2)</span>
+          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
+            Workspace Slots ({userTier.toUpperCase()} Tier)
+          </span>
           <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded border border-slate-200 font-mono">
-            {activeMatches.length} / 2 Slots Locked
+            {activeMatches.length} / {maxSlots} Slots
           </span>
         </div>
 
         <div className="space-y-4">
-          {/* SLOT 1 */}
-          <div className="border border-slate-200 rounded-xl p-4 space-y-3 relative overflow-hidden">
-            <div className={`absolute top-0 left-0 w-1 h-full ${slot1 ? "bg-emerald-500" : "bg-slate-200"}`} />
-            {slot1 ? (
-              <div className="space-y-3">
-                <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-full bg-slate-100 overflow-hidden border border-slate-250 flex-shrink-0">
-                      <img src={slot1.partner.avatar} alt={slot1.partner.name} className="w-full h-full object-cover" />
+          {slots.map((slot, index) => (
+            <div key={index} className="border border-slate-200 rounded-xl p-4 space-y-3 relative overflow-hidden bg-white hover:border-slate-300 transition duration-150">
+              <div className={`absolute top-0 left-0 w-1 h-full ${slot ? "bg-emerald-500" : "bg-slate-200"}`} />
+              
+              {slot ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-2.5">
+                      <div 
+                        className="w-9 h-9 rounded-full bg-slate-100 overflow-hidden border border-slate-250 flex-shrink-0 cursor-pointer hover:scale-105 duration-100"
+                        onClick={() => onViewProfile?.(slot.partner.id)}
+                        title="View researcher coordinates"
+                      >
+                        <img src={slot.partner.avatar} alt={slot.partner.name} className="w-full h-full object-cover" />
+                      </div>
+                      <div>
+                        <h4 
+                          className="text-xs font-extrabold font-sans text-slate-900 leading-none cursor-pointer hover:underline hover:text-indigo-600"
+                          onClick={() => onViewProfile?.(slot.partner.id)}
+                        >
+                          {slot.partner.name}
+                        </h4>
+                        <p className="text-[10px] text-slate-400 font-bold mt-1 max-w-[180px] truncate">{slot.partner.institution}</p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="text-xs font-bold font-sans text-slate-900 leading-none">{slot1.partner.name}</h4>
-                      <p className="text-[10px] text-slate-400 font-bold mt-1 max-w-[180px] truncate">{slot1.partner.institution}</p>
-                    </div>
+                    <button
+                      onClick={() => handleClose(slot.matchId)}
+                      disabled={closingId === slot.matchId}
+                      className="p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 border-none cursor-pointer duration-100 flex items-center justify-center bg-transparent"
+                      title="Terminate Workspace and Free Slot"
+                    >
+                      <Power className="w-4 h-4 text-rose-500" />
+                    </button>
+                  </div>
+                  
+                  <div className="flex items-center justify-between text-[10px] pt-1.5 border-t border-slate-100 text-slate-500">
+                    <button
+                      onClick={() => onSelectPartner(slot.partner)}
+                      className="text-indigo-600 hover:text-indigo-800 font-extrabold border-none bg-transparent cursor-pointer"
+                    >
+                      Open Workspace Chat &rarr;
+                    </button>
+                    <span className="bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 rounded border border-emerald-100 uppercase text-[8px] tracking-wider">
+                      Active Lab
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-2 text-center text-slate-400 space-y-2.5">
+                  <FolderLock className="w-5 h-5 text-slate-350 mx-auto" />
+                  <div>
+                    <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Slot {index + 1} Available</p>
+                    <p className="text-[9px] text-slate-400 font-mono mt-0.5">Ready for mutual co-author alignment</p>
                   </div>
                   <button
-                    onClick={() => handleClose(slot1.matchId)}
-                    disabled={closingId === slot1.matchId}
-                    className="p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 border-none cursor-pointer duration-100 flex items-center justify-center bg-transparent"
-                    title="Terminate and Free Slot"
+                    onClick={onSwipeJoin}
+                    className="py-1 px-3 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[9px] font-mono font-black uppercase transition border-none cursor-pointer shadow-sm"
                   >
-                    <Power className="w-4 h-4 text-rose-500" />
+                    ✦ Swipe Match Candidates
                   </button>
                 </div>
-                
-                <div className="flex items-center justify-between text-[10px] pt-1 border-t border-slate-100 text-slate-500">
-                  <button
-                    onClick={() => onSelectPartner(slot1.partner)}
-                    className="text-emerald-600 hover:text-emerald-700 font-bold border-none bg-transparent cursor-pointer"
-                  >
-                    Open Workspace Chat &rarr;
-                  </button>
-                  <span className="bg-emerald-50 text-emerald-750 font-bold px-2 py-0.5 rounded border border-emerald-100">Active Workspace</span>
-                </div>
-              </div>
-            ) : (
-              <div className="py-2 text-center text-slate-400 space-y-2">
-                <FolderLock className="w-5 h-5 text-slate-300 mx-auto" />
-                <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Slot 1 Available</p>
-                <p className="text-[9px] text-slate-400 font-medium font-mono">Send Collab Requests in Discovery to fill this slot.</p>
-              </div>
-            )}
-          </div>
-
-          {/* SLOT 2 */}
-          <div className="border border-slate-200 rounded-xl p-4 space-y-3 relative overflow-hidden">
-            <div className={`absolute top-0 left-0 w-1 h-full ${slot2 ? "bg-emerald-500" : "bg-slate-200"}`} />
-            {slot2 ? (
-              <div className="space-y-3">
-                <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-full bg-slate-100 overflow-hidden border border-slate-250 flex-shrink-0">
-                      <img src={slot2.partner.avatar} alt={slot2.partner.name} className="w-full h-full object-cover" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold font-sans text-slate-900 leading-none">{slot2.partner.name}</h4>
-                      <p className="text-[10px] text-slate-400 font-bold mt-1 max-w-[180px] truncate">{slot2.partner.institution}</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleClose(slot2.matchId)}
-                    disabled={closingId === slot2.matchId}
-                    className="p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 border-none cursor-pointer duration-100 flex items-center justify-center bg-transparent"
-                    title="Terminate and Free Slot"
-                  >
-                    <Power className="w-4 h-4 text-rose-500" />
-                  </button>
-                </div>
-                
-                <div className="flex items-center justify-between text-[10px] pt-1 border-t border-slate-100 text-slate-500">
-                  <button
-                    onClick={() => onSelectPartner(slot2.partner)}
-                    className="text-emerald-600 hover:text-emerald-700 font-bold border-none bg-transparent cursor-pointer"
-                  >
-                    Open Workspace Chat &rarr;
-                  </button>
-                  <span className="bg-emerald-50 text-emerald-750 font-bold px-2 py-0.5 rounded border border-emerald-100">Active Workspace</span>
-                </div>
-              </div>
-            ) : (
-              <div className="py-2 text-center text-slate-400 space-y-2">
-                <FolderLock className="w-5 h-5 text-slate-300 mx-auto" />
-                <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Slot 2 Available</p>
-                <p className="text-[9px] text-slate-400 font-medium font-mono">Send Collab Requests in Discovery to fill this slot.</p>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          ))}
         </div>
       </section>
 
       {/* Section 2: Inbound Collab Requests */}
       <section className="space-y-4">
-        <h3 className="font-sans font-extrabold text-xs text-slate-900 uppercase tracking-wider pl-1">
+        <h3 className="font-sans font-extrabold text-xs text-slate-950 uppercase tracking-widest pl-1">
           Incoming Collab Requests ({likers.length})
         </h3>
 
@@ -250,9 +236,9 @@ export function CollabsView({
               <GraduationCap className="w-5 h-5 text-slate-300" />
             </div>
             <div className="space-y-1">
-              <h4 className="font-sans font-bold text-xs text-slate-800">No Pending Requests</h4>
-              <p className="text-[11px] text-slate-500 leading-relaxed max-w-xs mx-auto font-semibold">
-                You have no outstanding connection queries. Check back soon, or send collab requests on Discovery to trigger reciprocal agreements!
+              <h4 className="font-sans font-bold text-xs text-slate-850 animate-pulse">Lobby Request Stream Vacant</h4>
+              <p className="text-[11px] text-slate-400 leading-relaxed max-w-xs mx-auto font-semibold">
+                You have no outstanding connection queries. Check back soon, or broadcast research posts in Discovery to trigger reciprocal agreements!
               </p>
             </div>
           </div>
@@ -263,37 +249,52 @@ export function CollabsView({
                 key={profile.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-white border border-slate-200 rounded-[20px] p-5 shadow-sm space-y-4 hover:border-slate-300 duration-150 relative overflow-hidden"
+                className="bg-white border border-slate-200 rounded-[20px] p-5 shadow-sm space-y-4 hover:border-slate-350 duration-150 relative overflow-hidden"
               >
-                {/* Active vector visual highlights */}
                 <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50/20 rounded-full blur-3xl -z-10" />
 
-                <div className="flex items-start gap-3">
-                  <div className="w-11 h-11 rounded-full overflow-hidden border border-slate-200 bg-slate-100 flex-shrink-0">
-                    <img src={profile.avatar} alt={profile.name} className="w-full h-full object-cover" />
-                  </div>
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-sans font-extrabold text-sm text-slate-900 leading-none">{profile.name}</h4>
-                      <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded font-mono">
-                        {profile.matchScore}% Synergy
-                      </span>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div 
+                      className="w-11 h-11 rounded-full overflow-hidden border border-slate-205 bg-slate-100 flex-shrink-0 cursor-pointer hover:scale-105 duration-100"
+                      onClick={() => onViewProfile?.(profile.id)}
+                      title="Inspect researcher profile stats"
+                    >
+                      <img src={profile.avatar} alt={profile.name} className="w-full h-full object-cover" />
                     </div>
-                    <p className="text-[10px] text-slate-500 font-bold">{profile.role}</p>
-                    <p className="text-[10px] text-slate-400 font-semibold">{profile.institution}</p>
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <h4 
+                          className="font-sans font-extrabold text-sm text-slate-900 leading-none cursor-pointer hover:underline hover:text-indigo-600"
+                          onClick={() => onViewProfile?.(profile.id)}
+                        >
+                          {profile.name}
+                        </h4>
+                        <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded font-mono">
+                          {profile.matchScore || 85}% Synergy
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-505 font-extrabold">{profile.role}</p>
+                      <p className="text-[10px] text-slate-400 font-semibold">{profile.institution}</p>
+                    </div>
                   </div>
+                  
+                  <button
+                    onClick={() => onViewProfile?.(profile.id)}
+                    className="p-1 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[9px] font-mono font-black uppercase rounded-lg border-none cursor-pointer z-10"
+                  >
+                    View Stats
+                  </button>
                 </div>
 
-                {/* Specific Research Intent Statement */}
-                <div className="text-xs text-slate-600 bg-slate-50 border border-slate-150 rounded-xl p-3 leading-relaxed italic">
+                <div className="text-xs text-slate-650 bg-slate-50 border border-slate-150 rounded-xl p-3 leading-relaxed italic">
                   &ldquo;{profile.intent}&rdquo;
                 </div>
 
-                {/* Reciprocal Accept Actuation */}
                 <div className="flex items-center justify-between pt-1">
                   <div className="flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-505 animate-pulse text-emerald-500" />
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Ready to Co-author</span>
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-500 animate-pulse" />
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Ready to Co-author</span>
                   </div>
 
                   <button
@@ -319,10 +320,10 @@ export function CollabsView({
       <section className="bg-white border border-slate-200 rounded-[20px] p-5 shadow-sm space-y-3">
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-5 h-5 text-emerald-600" />
-          <h3 className="font-sans font-extrabold text-xs text-slate-900 uppercase tracking-wider">Research Commitment Policy</h3>
+          <h3 className="font-sans font-extrabold text-xs text-slate-950 uppercase tracking-widest">Research Commitment Policy</h3>
         </div>
-        <p className="text-xs text-slate-500 leading-relaxed font-semibold">
-          Restricting active matches to 2 distinct channels forces maximum commitment and ensures that co-author partnerships actually materialize into submitted drafts.
+        <p className="text-xs text-slate-505 leading-relaxed font-semibold">
+          Your current co-author limit is restricted dynamically to maximize research execution focus and make sure matches materialize into published papers.
         </p>
       </section>
     </div>
